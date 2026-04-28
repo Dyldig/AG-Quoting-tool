@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap');
+
+:root {
+  --brand-brown: #31261D;
+  --brand-green: #878800;
+  --brand-stone: #ecdcc8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #f7f0e7;
+  color: #31261D;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Remove number input spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-green text-white px-4 py-2 font-medium text-sm hover:bg-brand-green-dark transition-colors;
+  }
+  .btn-secondary {
+    @apply border border-brand-brown text-brand-brown px-4 py-2 font-medium text-sm hover:bg-brand-stone transition-colors;
+  }
+  .btn-ghost {
+    @apply text-brand-brown px-4 py-2 font-medium text-sm hover:bg-brand-stone transition-colors;
+  }
+  .input-base {
+    @apply border border-brand-stone bg-white px-3 py-2 text-sm text-brand-brown w-full focus:outline-none focus:border-brand-green;
+  }
+  .label-base {
+    @apply text-xs font-medium text-brand-brown uppercase tracking-wide;
+  }
+  .card {
+    @apply bg-white border border-brand-stone;
+  }
+  .status-draft {
+    @apply bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5;
+  }
+  .status-sent {
+    @apply bg-blue-50 text-blue-700 text-xs font-medium px-2 py-0.5;
+  }
+  .status-accepted {
+    @apply bg-green-50 text-green-700 text-xs font-medium px-2 py-0.5;
+  }
+  .status-rejected {
+    @apply bg-red-50 text-red-700 text-xs font-medium px-2 py-0.5;
+  }
+}

@@ -1,0 +1,202 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { formatCurrency } from '@/lib/pricing'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  const view = request.nextUrl.searchParams.get('view') ?? 'customer'
+  const isInternal = view === 'internal'
+
+  try {
+    const supabase = await createServiceClient()
+    const { data: quote, error } = await supabase
+      .from('quotes')
+      .select('*, region:regions(*), lines:quote_lines(*, product:products(*)), blend:quote_blends(*, amendments:blend_amendments(*, amendment:amendments(*)))')
+      .eq('id', params.id)
+      .single()
+
+    if (error || !quote) {
+      return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
+    }
+
+    const productSubtotal = (quote.lines ?? []).reduce((s: number, l: any) => s + l.line_total, 0)
+    const blendFeeTotal = quote.blend?.blend_fee_total ?? 0
+    const blendAmendmentTotal = (quote.blend?.amendments ?? []).reduce((s: number, a: any) => s + a.line_total, 0)
+    const blendTotal = blendFeeTotal + blendAmendmentTotal
+    const subtotal = productSubtotal + blendTotal
+    const gstAmount = quote.gst_type === 'ex' ? subtotal * 0.1 : 0
+    const grandTotal = subtotal + gstAmount
+    const effectiveTotal = quote.override_total ?? grandTotal
+
+    const html = generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, effectiveTotal })
+
+    // Use Puppeteer
+    const puppeteer = await import('puppeteer')
+    const browser = await puppeteer.default.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    })
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    const pdfRaw = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' },
+    })
+    await browser.close()
+    const pdfBuffer = Buffer.from(pdfRaw)
+
+    return new NextResponse(pdfBuffer, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${quote.quote_number}-${view}.pdf"`,
+      },
+    })
+  } catch (err: any) {
+    console.error('PDF generation error:', err)
+    return NextResponse.json({ error: 'PDF generation failed', detail: err.message }, { status: 500 })
+  }
+}
+
+function generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, effectiveTotal }: {
+  quote: any
+  isInternal: boolean
+  subtotal: number
+  gstAmount: number
+  grandTotal: number
+  effectiveTotal: number
+}) {
+  const lineRows = (quote.lines ?? []).map((line: any) => `
+    <tr>
+      <td>${line.product?.name ?? '—'}<br><small style="color:#888">${line.product?.sku ?? ''} · ${line.uom === 'm3' ? 'm³' : 't'}</small></td>
+      <td class="num">${line.volume} ${line.uom === 'm3' ? 'm³' : 't'}</td>
+      ${isInternal ? `<td class="num">${formatCurrency(line.base_price)}</td><td class="num">${line.freight > 0 ? formatCurrency(line.freight) : 'Pickup'}</td>` : ''}
+      <td class="num">${formatCurrency(line.line_total)}</td>
+    </tr>
+  `).join('')
+
+  const blendRows = quote.blend ? (quote.blend.amendments ?? []).map((a: any) => `
+    <tr>
+      <td>${a.amendment?.name ?? a.custom_name ?? 'Amendment'}</td>
+      <td class="num">${a.quantity_tonnes.toFixed(3)} t</td>
+      <td class="num">${formatCurrency(a.rate_per_tonne)}/t</td>
+      <td class="num">${formatCurrency(a.line_total)}</td>
+    </tr>
+  `).join('') : ''
+
+  const validityDate = new Date()
+  validityDate.setDate(validityDate.getDate() + 30)
+  const validUntil = validityDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; font-size: 11pt; color: #31261D; line-height: 1.5; }
+  .header { background: #31261D; color: white; padding: 24px 0; margin-bottom: 32px; }
+  .header-inner { display: flex; justify-content: space-between; align-items: flex-start; }
+  .logo { font-size: 18pt; font-weight: 500; color: #ecdcc8; }
+  .logo span { color: #878800; }
+  .quote-meta { text-align: right; }
+  .quote-number { font-size: 16pt; font-weight: 500; }
+  .quote-date { color: #ecdcc8; font-size: 9pt; margin-top: 4px; }
+  .section { margin-bottom: 24px; }
+  h2 { font-size: 9pt; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: #878800; margin-bottom: 12px; border-bottom: 1px solid #ecdcc8; padding-bottom: 6px; }
+  .customer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-label { font-size: 8pt; color: #888; text-transform: uppercase; letter-spacing: 0.06em; }
+  .field-value { font-weight: 500; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f7f0e7; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; padding: 8px 10px; text-align: left; }
+  th.num, td.num { text-align: right; }
+  td { padding: 8px 10px; border-bottom: 1px solid #ecdcc8; font-size: 10pt; }
+  .totals { margin-left: auto; width: 280px; }
+  .totals-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 10pt; }
+  .totals-row.total { font-weight: 500; font-size: 13pt; color: #878800; border-top: 2px solid #878800; margin-top: 6px; padding-top: 10px; }
+  .totals-row.sub { color: #666; }
+  .override-note { background: #fff8e1; border: 1px solid #f59e0b; padding: 10px 14px; margin-top: 16px; font-size: 9pt; }
+  .validity { font-size: 9pt; color: #888; margin-top: 32px; border-top: 1px solid #ecdcc8; padding-top: 16px; }
+  .badge { display: inline-block; background: #f7f0e7; color: #31261D; font-size: 8pt; padding: 2px 8px; font-weight: 500; text-transform: capitalize; }
+  .badge.complex { background: #fef3c7; color: #92400e; }
+  .internal-banner { background: #878800; color: white; text-align: center; padding: 6px; font-size: 9pt; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+${isInternal ? '<div class="internal-banner">INTERNAL — CONFIDENTIAL</div>' : ''}
+<div class="header">
+  <div class="header-inner">
+    <div>
+      <div class="logo">Jeffries<span> Agriculture</span></div>
+      <div style="color:#ecdcc8;font-size:9pt;margin-top:6px">Compost · Mulch · Soil Amendments</div>
+    </div>
+    <div class="quote-meta">
+      <div class="quote-number">${quote.quote_number}</div>
+      <div class="quote-date">${new Date(quote.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+      <div style="margin-top:8px;display:inline-block;background:#878800;color:white;padding:3px 10px;font-size:9pt;font-weight:500;text-transform:capitalize">${quote.status}</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Customer Details</h2>
+  <div class="customer-grid">
+    <div><div class="field-label">Company</div><div class="field-value">${quote.customer_name}</div></div>
+    ${quote.contact_name ? `<div><div class="field-label">Contact</div><div class="field-value">${quote.contact_name}</div></div>` : ''}
+    ${quote.email ? `<div><div class="field-label">Email</div><div class="field-value">${quote.email}</div></div>` : ''}
+    <div><div class="field-label">Region</div><div class="field-value">${(quote.region as any)?.name ?? '—'}</div></div>
+    <div><div class="field-label">Fulfilment</div><div class="field-value" style="text-transform:capitalize">${quote.fulfilment_type}</div></div>
+    <div><div class="field-label">GST</div><div class="field-value">${quote.gst_type === 'ex' ? 'Ex GST' : 'Inc GST'}</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Products</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th>Volume</th>
+        ${isInternal ? '<th class="num">Base Price</th><th class="num">Freight</th>' : ''}
+        <th class="num">Total</th>
+      </tr>
+    </thead>
+    <tbody>${lineRows}</tbody>
+  </table>
+</div>
+
+${quote.blend && (quote.blend.amendments ?? []).length > 0 ? `
+<div class="section">
+  <h2>Blend — <span class="badge ${quote.blend.classification}">${quote.blend.classification}</span></h2>
+  <table>
+    <thead>
+      <tr><th>Amendment</th><th class="num">Qty (t)</th><th class="num">Rate</th><th class="num">Total</th></tr>
+    </thead>
+    <tbody>${blendRows}</tbody>
+  </table>
+  ${isInternal ? `
+  <div style="margin-top:10px;padding:10px;background:#f7f0e7;">
+    <strong>Blend fee:</strong> ${formatCurrency(quote.blend.blend_fee_rate)}/t × ${(quote.blend.total_base_tonnes + quote.blend.total_amendment_tonnes).toFixed(2)} t = ${formatCurrency(quote.blend.blend_fee_total)}
+    (${quote.blend.classification} classification)
+  </div>` : ''}
+</div>` : ''}
+
+<div class="totals">
+  ${(quote.blend && (quote.blend.blend_fee_total + ((quote.blend.amendments ?? []).reduce((s: number, a: any) => s + a.line_total, 0))) > 0) ? `<div class="totals-row sub"><span>Blend subtotal</span><span>${formatCurrency(quote.blend.blend_fee_total + (quote.blend.amendments ?? []).reduce((s: number, a: any) => s + a.line_total, 0))}</span></div>` : ''}
+  <div class="totals-row sub"><span>Subtotal</span><span>${formatCurrency(subtotal)}</span></div>
+  ${quote.gst_type === 'ex' ? `<div class="totals-row sub"><span>GST (10%)</span><span>${formatCurrency(gstAmount)}</span></div>` : ''}
+  <div class="totals-row total"><span>TOTAL</span><span>${formatCurrency(effectiveTotal)}</span></div>
+  ${isInternal && quote.override_total ? `<div class="override-note">⚠ Manual override applied. Calculated total: ${formatCurrency(grandTotal)}. Override: ${formatCurrency(quote.override_total)}.</div>` : ''}
+</div>
+
+${quote.notes ? `<div class="section" style="margin-top:24px"><h2>Notes</h2><p>${quote.notes}</p></div>` : ''}
+
+<div class="validity">
+  <p>This quote is valid until <strong>${validUntil}</strong>. All prices are in Australian Dollars (AUD) and ${quote.gst_type === 'ex' ? 'exclude' : 'include'} GST unless otherwise stated.</p>
+  <p style="margin-top:6px">For questions, please contact your Jeffries Agriculture sales representative.</p>
+</div>
+</body>
+</html>`
+}
