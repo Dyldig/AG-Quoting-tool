@@ -2,7 +2,6 @@ import type {
   Product,
   PricingRule,
   FreightMatrix,
-  Amendment,
   CustomerType,
   FulfilmentType,
   GstType,

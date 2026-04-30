@@ -85,9 +85,9 @@ function generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, e
     </tr>
   `).join('') : ''
 
-  const validityDate = new Date()
-  validityDate.setDate(validityDate.getDate() + 30)
-  const validUntil = validityDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })
+  const validUntil = quote.valid_until
+    ? new Date(quote.valid_until).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })
+    : (() => { const d = new Date(); d.setDate(d.getDate() + 60); return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' }) })()
 
   return `<!DOCTYPE html>
 <html>
@@ -97,10 +97,10 @@ function generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, e
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'DM Sans', sans-serif; font-size: 11pt; color: #31261D; line-height: 1.5; }
-  .header { background: #31261D; color: white; padding: 24px 0; margin-bottom: 32px; }
-  .header-inner { display: flex; justify-content: space-between; align-items: flex-start; }
-  .logo { font-size: 18pt; font-weight: 500; color: #ecdcc8; }
-  .logo span { color: #878800; }
+  .header { background: #31261D; color: white; padding: 20px 0; margin-bottom: 32px; }
+  .header-inner { display: flex; justify-content: space-between; align-items: center; }
+  .logo-wrap { display: flex; align-items: center; gap: 14px; }
+  .logo-tagline { color: #ecdcc8; font-size: 8.5pt; margin-top: 2px; letter-spacing: 0.04em; }
   .quote-meta { text-align: right; }
   .quote-number { font-size: 16pt; font-weight: 500; }
   .quote-date { color: #ecdcc8; font-size: 9pt; margin-top: 4px; }
@@ -118,7 +118,11 @@ function generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, e
   .totals-row.total { font-weight: 500; font-size: 13pt; color: #878800; border-top: 2px solid #878800; margin-top: 6px; padding-top: 10px; }
   .totals-row.sub { color: #666; }
   .override-note { background: #fff8e1; border: 1px solid #f59e0b; padding: 10px 14px; margin-top: 16px; font-size: 9pt; }
-  .validity { font-size: 9pt; color: #888; margin-top: 32px; border-top: 1px solid #ecdcc8; padding-top: 16px; }
+  .validity { font-size: 9pt; color: #888; margin-top: 24px; border-top: 1px solid #ecdcc8; padding-top: 16px; }
+  .conditions { margin-top: 32px; border-top: 2px solid #878800; padding-top: 20px; }
+  .conditions h3 { font-size: 9pt; font-weight: 500; color: #31261D; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; margin-top: 16px; }
+  .conditions h3:first-child { margin-top: 0; }
+  .conditions p { font-size: 8.5pt; color: #666; line-height: 1.6; margin-bottom: 6px; }
   .badge { display: inline-block; background: #f7f0e7; color: #31261D; font-size: 8pt; padding: 2px 8px; font-weight: 500; text-transform: capitalize; }
   .badge.complex { background: #fef3c7; color: #92400e; }
   .internal-banner { background: #878800; color: white; text-align: center; padding: 6px; font-size: 9pt; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; }
@@ -128,18 +132,26 @@ function generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, e
 ${isInternal ? '<div class="internal-banner">INTERNAL — CONFIDENTIAL</div>' : ''}
 <div class="header">
   <div class="header-inner">
-    <div>
-      <div class="logo">Jeffries<span> Agriculture</span></div>
-      <div style="color:#ecdcc8;font-size:9pt;margin-top:6px">Compost · Mulch · Soil Amendments</div>
+    <div class="logo-wrap">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 60" width="140" height="38" fill="none">
+        <path d="M8 48 C8 48 28 44 32 24 C36 4 20 4 16 12 C12 20 14 36 8 48Z" fill="#878800"/>
+        <path d="M8 48 C8 48 2 36 6 24 C10 12 20 12 22 20 C24 28 16 40 8 48Z" fill="#5a5b00"/>
+        <text x="46" y="36" font-family="Georgia, serif" font-size="22" font-weight="bold" fill="#ecdcc8" letter-spacing="1">JEFFRIES</text>
+        <text x="46" y="50" font-family="sans-serif" font-size="9" fill="#878800" letter-spacing="3">AGRICULTURE</text>
+      </svg>
+      <div class="logo-tagline">Compost · Mulch · Soil Amendments</div>
     </div>
     <div class="quote-meta">
       <div class="quote-number">${quote.quote_number}</div>
+      ${quote.quote_name ? `<div style="color:#ecdcc8;font-size:9pt;margin-top:3px">${quote.quote_name}</div>` : ''}
       <div class="quote-date">${new Date(quote.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+      <div style="color:#ecdcc8;font-size:8.5pt;margin-top:3px">Valid until <strong style="color:white">${validUntil}</strong></div>
       <div style="margin-top:8px;display:inline-block;background:#878800;color:white;padding:3px 10px;font-size:9pt;font-weight:500;text-transform:capitalize">${quote.status}</div>
     </div>
   </div>
 </div>
 
+${quote.quote_name ? `<div class="section" style="margin-bottom:16px"><div style="font-size:12pt;font-weight:500;color:#31261D">${quote.quote_name}</div></div>` : ''}
 <div class="section">
   <h2>Customer Details</h2>
   <div class="customer-grid">
@@ -193,9 +205,23 @@ ${quote.blend && (quote.blend.amendments ?? []).length > 0 ? `
 
 ${quote.notes ? `<div class="section" style="margin-top:24px"><h2>Notes</h2><p>${quote.notes}</p></div>` : ''}
 
+${!isInternal ? `
+<div class="conditions">
+  <h3>Conditions of Quotation</h3>
+  <p>All information provided in this quote is 'commercial in confidence'.</p>
+  <p>If acceptance of this quote exceeds sixty (60) days, the quoted price may be subject to change.</p>
+  <p>If Jeffries are required to purchase additional products, or hold stock for a period of time, this may incur holding costs or the quoted value of the purchased goods to be invoiced.</p>
+  <p>This quote incorporates Jeffries' standard terms of contract for the sale of goods and hire of equipment (found on the back of all Jeffries invoices).</p>
+
+  <h3>Product Information</h3>
+  <p>The products Jeffries manufacture are made from recycled organics, meaning better quality, nutrient rich, compost, soil and mulch, contributing to a more sustainable environment. While we continue to invest in new technologies and processes to remove visual contaminants, some will still appear in the finished product. These visual contaminants will not affect product performance in any way.</p>
+  <p>Thank you for the opportunity to provide you with this quote. This is an indicative price only. Prices quoted are m³/t for one unit per line item.</p>
+</div>` : ''}
+
 <div class="validity">
   <p>This quote is valid until <strong>${validUntil}</strong>. All prices are in Australian Dollars (AUD) and ${quote.gst_type === 'ex' ? 'exclude' : 'include'} GST unless otherwise stated.</p>
   <p style="margin-top:6px">For questions, please contact your Jeffries Agriculture sales representative.</p>
+  <p style="margin-top:8px;font-size:8pt;color:#aaa">Generated by Jeffries Quoting Tool · ${quote.quote_number}${quote.quote_name ? ` · ${quote.quote_name}` : ''}</p>
 </div>
 </body>
 </html>`

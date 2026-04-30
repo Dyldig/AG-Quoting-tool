@@ -5,12 +5,11 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { formatCurrency } from '@/lib/pricing'
-import type { Quote, QuoteStatus, CustomerType, UserRole } from '@/lib/types'
+import type { Quote, QuoteStatus, CustomerType } from '@/lib/types'
 
 interface QuotesListClientProps {
   quotes: Quote[]
-  userRole: UserRole
+  userRole: string
 }
 
 type Filters = {
@@ -21,7 +20,7 @@ type Filters = {
   dateTo: string
 }
 
-export function QuotesListClient({ quotes, userRole }: QuotesListClientProps) {
+export function QuotesListClient({ quotes }: QuotesListClientProps) {
   const [filters, setFilters] = useState<Filters>({
     status: '',
     customerType: '',
@@ -150,6 +149,7 @@ export function QuotesListClient({ quotes, userRole }: QuotesListClientProps) {
                   <td className="px-4 py-3 font-medium text-brand-green">{q.quote_number}</td>
                   <td className="px-4 py-3">
                     <div>{q.customer_name}</div>
+                    {q.quote_name && <div className="text-xs text-brand-green/80 font-medium">{q.quote_name}</div>}
                     {q.contact_name && <div className="text-xs text-brand-brown/50">{q.contact_name}</div>}
                   </td>
                   <td className="px-4 py-3 text-brand-brown/70">{(q.region as any)?.name ?? '—'}</td>

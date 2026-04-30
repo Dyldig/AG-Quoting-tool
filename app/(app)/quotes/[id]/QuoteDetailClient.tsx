@@ -8,19 +8,20 @@ import { Button } from '@/components/ui/Button'
 import { StatusBadge, Badge } from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/pricing'
 import { createClient } from '@/lib/supabase/client'
-import type { Quote, Product, PricingRule, FreightMatrix, Region, Amendment, QuoteStatus, OverrideLog } from '@/lib/types'
+import type { Quote, Region, QuoteStatus, OverrideLog } from '@/lib/types'
 
 interface QuoteDetailClientProps {
   quote: Quote
-  products: Product[]
-  pricingRules: PricingRule[]
-  freightMatrix: FreightMatrix[]
   regions: Region[]
-  amendments: Amendment[]
   overrideLogs: OverrideLog[]
+  // Additional props accepted but not rendered directly (passed from page)
+  products?: unknown[]
+  pricingRules?: unknown[]
+  freightMatrix?: unknown[]
+  amendments?: unknown[]
 }
 
-export function QuoteDetailClient({ quote, products, regions, overrideLogs }: QuoteDetailClientProps) {
+export function QuoteDetailClient({ quote, regions, overrideLogs }: QuoteDetailClientProps) {
   const [status, setStatus] = useState<QuoteStatus>(quote.status)
   const [updating, setUpdating] = useState(false)
   const [emailSending, setEmailSending] = useState(false)
@@ -81,14 +82,25 @@ export function QuoteDetailClient({ quote, products, regions, overrideLogs }: Qu
             <ArrowLeftIcon className="w-4 h-4" />
           </Link>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-lg font-medium text-brand-brown">{quote.quote_number}</h1>
+              {quote.quote_name && (
+                <span className="text-sm text-brand-green font-medium">{quote.quote_name}</span>
+              )}
               <StatusBadge status={status} />
               {quote.override_total != null && <Badge variant="yellow">Override</Badge>}
               {quote.hubspot_synced_at && <Badge variant="stone">HubSpot synced</Badge>}
             </div>
             <p className="text-sm text-brand-brown/50 mt-0.5">
               Created {format(new Date(quote.created_at), 'dd MMM yyyy HH:mm')}
+              {quote.valid_until && (
+                <span className="ml-3">
+                  · Valid until{' '}
+                  <span className={new Date(quote.valid_until) < new Date() ? 'text-red-600 font-medium' : 'text-brand-brown'}>
+                    {format(new Date(quote.valid_until), 'dd MMM yyyy')}
+                  </span>
+                </span>
+              )}
             </p>
           </div>
         </div>

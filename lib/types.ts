@@ -77,6 +77,7 @@ export interface Amendment {
 export interface Quote {
   id: string
   quote_number: string
+  quote_name: string | null
   customer_name: string
   contact_name: string | null
   email: string | null
@@ -88,6 +89,7 @@ export interface Quote {
   created_by: string | null
   created_at: string
   updated_at: string
+  valid_until: string | null
   hubspot_deal_id: string | null
   hubspot_synced_at: string | null
   email_sent_at: string | null
@@ -194,6 +196,7 @@ export interface BlendAmendmentState {
 }
 
 export interface QuoteBuilderState {
+  quoteName: string
   customerName: string
   contactName: string
   email: string

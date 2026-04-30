@@ -7,15 +7,12 @@ import { Button } from '@/components/ui/Button'
 import { useQuoteBuilder } from '@/store/quoteBuilder'
 import { createClient } from '@/lib/supabase/client'
 import { classifyBlend, calcBlendFee, calcGST } from '@/lib/pricing'
-import type { Product, PricingRule } from '@/lib/types'
 
 interface QuoteActionsProps {
-  products: Product[]
-  pricingRules: PricingRule[]
   existingQuoteId?: string
 }
 
-export function QuoteActions({ products, pricingRules, existingQuoteId }: QuoteActionsProps) {
+export function QuoteActions({ existingQuoteId }: QuoteActionsProps) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [emailSending, setEmailSending] = useState(false)
@@ -54,6 +51,7 @@ export function QuoteActions({ products, pricingRules, existingQuoteId }: QuoteA
       const grandTotal = subtotal + gstAmount
 
       const quotePayload = {
+        quote_name: store.quoteName || null,
         customer_name: store.customerName,
         contact_name: store.contactName || null,
         email: store.email || null,

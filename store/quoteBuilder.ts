@@ -12,6 +12,7 @@ import type {
 
 interface QuoteBuilderStore {
   // Customer info
+  quoteName: string
   customerName: string
   contactName: string
   email: string
@@ -37,15 +38,16 @@ interface QuoteBuilderStore {
   loadedQuoteId: string | null
 
   // Actions
-  setCustomerField: (field: 'customerName' | 'contactName' | 'email' | 'hubspotDealId' | 'notes', value: string) => void
+  setCustomerField: (field: 'quoteName' | 'customerName' | 'contactName' | 'email' | 'hubspotDealId' | 'notes', value: string) => void
   setRegionId: (id: string, defaultUom?: UOM) => void
   setCustomerType: (type: CustomerType) => void
   setFulfilmentType: (type: FulfilmentType) => void
   setGstType: (type: GstType) => void
 
-  addLine: (productId: string) => string
+  addLine: (productId: string, uom?: UOM) => string
   removeLine: (lineId: string) => void
   updateLine: (lineId: string, updates: Partial<ProductLineState>) => void
+  setAllLinesUom: (uom: UOM) => void
 
   toggleBlend: () => void
   addBlendAmendment: (amendmentId: string | null, name: string, type: AmendmentType, ratePerTonne: number) => string
@@ -60,6 +62,7 @@ interface QuoteBuilderStore {
 }
 
 const defaultState = {
+  quoteName: '',
   customerName: '',
   contactName: '',
   email: '',
@@ -82,7 +85,7 @@ export const useQuoteBuilder = create<QuoteBuilderStore>()(
     ...defaultState,
 
     setCustomerField: (field, value) =>
-      set((state) => { state[field] = value }),
+      set((state) => { (state as Record<string, unknown>)[field] = value }),
 
     setRegionId: (id) =>
       set((state) => { state.regionId = id }),
@@ -96,14 +99,14 @@ export const useQuoteBuilder = create<QuoteBuilderStore>()(
     setGstType: (type) =>
       set((state) => { state.gstType = type }),
 
-    addLine: (productId) => {
+    addLine: (productId, uom = 'm3') => {
       const lineId = nanoid()
       set((state) => {
         state.lines.set(lineId, {
           id: lineId,
           productId,
           volume: 0,
-          uom: 'm3',
+          uom,
           basePrice: 0,
           freight: 0,
           lineTotal: 0,
@@ -123,6 +126,13 @@ export const useQuoteBuilder = create<QuoteBuilderStore>()(
         if (existing) {
           state.lines.set(lineId, { ...existing, ...updates })
         }
+      }),
+
+    setAllLinesUom: (uom) =>
+      set((state) => {
+        state.lines.forEach((line, id) => {
+          state.lines.set(id, { ...line, uom })
+        })
       }),
 
     toggleBlend: () =>

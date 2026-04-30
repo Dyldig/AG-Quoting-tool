@@ -1,6 +1,5 @@
 'use client'
 
-import { useRef } from 'react'
 import { useQuoteBuilder } from '@/store/quoteBuilder'
 import { Input } from '@/components/ui/Input'
 import type { Region } from '@/lib/types'
@@ -10,6 +9,7 @@ interface CustomerFieldsProps {
 }
 
 export function CustomerFields({ regions }: CustomerFieldsProps) {
+  const quoteName = useQuoteBuilder((s) => s.quoteName)
   const customerName = useQuoteBuilder((s) => s.customerName)
   const contactName = useQuoteBuilder((s) => s.contactName)
   const email = useQuoteBuilder((s) => s.email)
@@ -17,11 +17,30 @@ export function CustomerFields({ regions }: CustomerFieldsProps) {
   const regionId = useQuoteBuilder((s) => s.regionId)
   const setCustomerField = useQuoteBuilder((s) => s.setCustomerField)
   const setRegionId = useQuoteBuilder((s) => s.setRegionId)
+  const setAllLinesUom = useQuoteBuilder((s) => s.setAllLinesUom)
+
+  function handleRegionChange(id: string) {
+    const selected = regions.find((r) => r.id === id)
+    setRegionId(id, selected?.default_uom)
+    if (selected) {
+      // Auto-set all existing product lines to the region's default UOM
+      setAllLinesUom(selected.default_uom)
+    }
+  }
 
   return (
     <div className="bg-white border border-brand-stone p-4">
       <h2 className="text-xs font-medium text-brand-brown uppercase tracking-wide mb-4">Customer Details</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="sm:col-span-2 lg:col-span-3">
+          <Input
+            label="Quote Name / Project Reference"
+            value={quoteName}
+            onChange={(e) => setCustomerField('quoteName', e.target.value)}
+            placeholder="e.g. Autumn soil prep — Eastern block"
+            maxLength={120}
+          />
+        </div>
         <Input
           label="Company Name"
           value={customerName}
@@ -47,10 +66,7 @@ export function CustomerFields({ regions }: CustomerFieldsProps) {
           </label>
           <select
             value={regionId}
-            onChange={(e) => {
-              const selected = regions.find((r) => r.id === e.target.value)
-              setRegionId(e.target.value, selected?.default_uom)
-            }}
+            onChange={(e) => handleRegionChange(e.target.value)}
             className="border border-brand-stone bg-white px-3 py-2 text-sm text-brand-brown focus:outline-none focus:border-brand-green"
           >
             <option value="">— Select region —</option>

@@ -5,9 +5,8 @@ import { formatCurrency } from '@/lib/pricing'
 
 export const dynamic = 'force-dynamic'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  const resend = new Resend(process.env.RESEND_API_KEY)
   try {
     const supabase = await createServiceClient()
     const { data: quote, error } = await supabase

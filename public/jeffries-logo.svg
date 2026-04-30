@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 60" fill="none">
+  <!-- Leaf mark -->
+  <path d="M8 48 C8 48 28 44 32 24 C36 4 20 4 16 12 C12 20 14 36 8 48Z" fill="#878800"/>
+  <path d="M8 48 C8 48 2 36 6 24 C10 12 20 12 22 20 C24 28 16 40 8 48Z" fill="#5a5b00"/>
+  <!-- Wordmark -->
+  <text x="46" y="36" font-family="Georgia, serif" font-size="22" font-weight="bold" fill="#ecdcc8" letter-spacing="1">JEFFRIES</text>
+  <text x="46" y="50" font-family="Georgia, sans-serif" font-size="9" fill="#878800" letter-spacing="3">AGRICULTURE</text>
+</svg>

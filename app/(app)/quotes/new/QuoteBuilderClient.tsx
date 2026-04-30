@@ -29,6 +29,7 @@ export function QuoteBuilderClient({
   const lines = useQuoteBuilder((s) => s.lines)
   const addLine = useQuoteBuilder((s) => s.addLine)
   const resetQuote = useQuoteBuilder((s) => s.resetQuote)
+  const regionId = useQuoteBuilder((s) => s.regionId)
 
   const [selectedProduct, setSelectedProduct] = useState(products[0]?.id ?? '')
 
@@ -39,7 +40,9 @@ export function QuoteBuilderClient({
 
   function handleAddProduct() {
     if (!selectedProduct) return
-    addLine(selectedProduct)
+    // New lines inherit the current region's default UOM
+    const region = regions.find((r) => r.id === regionId)
+    addLine(selectedProduct, region?.default_uom ?? 'm3')
   }
 
   return (
@@ -112,7 +115,7 @@ export function QuoteBuilderClient({
         </div>
 
         {/* Actions */}
-        <QuoteActions products={products} pricingRules={pricingRules} />
+        <QuoteActions />
       </div>
     </div>
   )

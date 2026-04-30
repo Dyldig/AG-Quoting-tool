@@ -46,7 +46,6 @@ export function BlendSection({ amendments }: BlendSectionProps) {
 
 function BlendAmendmentList({ amendments }: { amendments: Amendment[] }) {
   const blendAmendments = useQuoteBuilder((s) => s.blendAmendments)
-  const removeBlendAmendment = useQuoteBuilder((s) => s.removeBlendAmendment)
 
   if (blendAmendments.size === 0) {
     return <p className="text-sm text-brand-brown/50">No amendments added yet.</p>
