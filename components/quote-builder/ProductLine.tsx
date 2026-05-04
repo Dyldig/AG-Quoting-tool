@@ -20,18 +20,19 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
   const customerType = useQuoteBuilder((s) => s.customerType)
   const fulfilmentType = useQuoteBuilder((s) => s.fulfilmentType)
   const regionId = useQuoteBuilder((s) => s.regionId)
+  const blendOpen = useQuoteBuilder((s) => s.blendOpen)
   const updateLine = useQuoteBuilder((s) => s.updateLine)
   const removeLine = useQuoteBuilder((s) => s.removeLine)
 
-  // Stable refs for uncontrolled volume input
   const volumeRef = useRef<HTMLInputElement>(null)
+  const freightRef = useRef<HTMLInputElement>(null)
   const volumeValueRef = useRef<number>(line?.volume ?? 0)
+  const freightOverrideValueRef = useRef<number>(line?.freightOverride ?? 0)
 
-  // Keep a stable ref to recalc so we can call it from UOM-change effect without deps issues
-  const recalcRef = useRef<(vol?: number, u?: UOM, pid?: string) => void>(() => {})
+  const recalcRef = useRef<(vol?: number, u?: UOM, pid?: string, freightOvr?: number) => void>(() => {})
 
   const recalc = useCallback(
-    (vol?: number, u?: UOM, pid?: string) => {
+    (vol?: number, u?: UOM, pid?: string, freightOvr?: number) => {
       if (!line) return
       const volume = vol ?? volumeValueRef.current
       const productId = pid ?? line.productId
@@ -39,28 +40,40 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
       const product = products.find((p) => p.id === productId)
       if (!product) return
 
-      // Pellets are always tonnes — ignore region/user UOM selection
       const uom: UOM = product.category === 'pellets' ? 't' : (u ?? line.uom)
-
       const volT = calcVolumeTonnes(volume, uom, product)
       const tier = calcTier(volT)
       const basePrice = lookupBasePrice(pricingRules, productId, customerType, tier) ?? 0
       const freight = lookupFreight(freightMatrix, regionId, product.category, fulfilmentType)
-      const lineTotal = calcLineTotal(volume, basePrice, freight)
+      const freightOverride = freightOvr ?? freightOverrideValueRef.current
 
-      updateLine(lineId, { volume, uom, productId, volumeT: volT, tier, basePrice, freight, lineTotal })
+      let lineTotal: number
+      if (product.category === 'pellets') {
+        lineTotal = volume * (basePrice + freightOverride)
+      } else if (blendOpen) {
+        // freight handled cumulatively in blend section
+        lineTotal = volume * basePrice
+      } else {
+        lineTotal = calcLineTotal(volume, basePrice, freight)
+      }
+
+      updateLine(lineId, {
+        volume, uom, productId,
+        productCategory: product.category,
+        volumeT: volT, tier, basePrice, freight,
+        freightOverride, lineTotal,
+      })
     },
-    [line, products, pricingRules, freightMatrix, customerType, fulfilmentType, regionId, lineId, updateLine]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [line, products, pricingRules, freightMatrix, customerType, fulfilmentType, regionId, lineId, updateLine, blendOpen]
   )
 
-  // Keep recalcRef current on every render — lets UOM effect call fresh recalc without it being a dep
   useEffect(() => { recalcRef.current = recalc })
 
-  // Bind volume input listeners once — select-all on focus, sync on blur/input
+  // Bind volume input listeners once
   useEffect(() => {
     const el = volumeRef.current
     if (!el) return
-
     const onFocus = () => el.select()
     const onInput = () => { volumeValueRef.current = parseFloat(el.value) || 0 }
     const onBlur = () => {
@@ -68,7 +81,6 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
       volumeValueRef.current = parsed
       recalcRef.current(parsed)
     }
-
     el.addEventListener('focus', onFocus)
     el.addEventListener('input', onInput)
     el.addEventListener('blur', onBlur)
@@ -77,13 +89,34 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
       el.removeEventListener('input', onInput)
       el.removeEventListener('blur', onBlur)
     }
-  }, []) // bind once — recalcRef always fresh
+  }, [])
 
-  // Re-run pricing when external factors change (not volume)
+  // Bind freight override input (pellets only) — re-bind when product changes
+  useEffect(() => {
+    const el = freightRef.current
+    if (!el) return
+    const onFocus = () => el.select()
+    const onInput = () => { freightOverrideValueRef.current = parseFloat(el.value) || 0 }
+    const onBlur = () => {
+      const parsed = parseFloat(el.value) || 0
+      freightOverrideValueRef.current = parsed
+      recalcRef.current(undefined, undefined, undefined, parsed)
+    }
+    el.addEventListener('focus', onFocus)
+    el.addEventListener('input', onInput)
+    el.addEventListener('blur', onBlur)
+    return () => {
+      el.removeEventListener('focus', onFocus)
+      el.removeEventListener('input', onInput)
+      el.removeEventListener('blur', onBlur)
+    }
+  }, [line?.productId])
+
+  // Re-run pricing when external factors change
   useEffect(() => {
     recalcRef.current()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerType, fulfilmentType, regionId])
+  }, [customerType, fulfilmentType, regionId, blendOpen])
 
   // Detect external UOM change (e.g. from region auto-set) and trigger recalc
   const prevUomRef = useRef<UOM | null>(null)
@@ -100,6 +133,12 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
   const currentProduct = products.find((p) => p.id === line.productId)
   const isPellet = currentProduct?.category === 'pellets'
 
+  function handleProductChange(newProductId: string) {
+    freightOverrideValueRef.current = 0
+    if (freightRef.current) freightRef.current.value = ''
+    recalcRef.current(undefined, undefined, newProductId, 0)
+  }
+
   return (
     <div className="bg-white border border-brand-stone p-4 flex flex-col gap-3">
       {/* Header row */}
@@ -108,7 +147,7 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
           <label className="text-xs font-medium text-brand-brown uppercase tracking-wide">Product</label>
           <select
             value={line.productId}
-            onChange={(e) => recalcRef.current(undefined, undefined, e.target.value)}
+            onChange={(e) => handleProductChange(e.target.value)}
             className="mt-1 border border-brand-stone bg-white px-3 py-2 text-sm text-brand-brown w-full focus:outline-none focus:border-brand-green"
           >
             {products.map((p) => (
@@ -155,6 +194,25 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
         </button>
       </div>
 
+      {/* Pellet freight rate input */}
+      {isPellet && (
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-brand-brown uppercase tracking-wide shrink-0">
+            Freight rate ($/t)
+          </label>
+          <input
+            ref={freightRef}
+            type="number"
+            defaultValue={line.freightOverride || ''}
+            placeholder="Ex gate ($0)"
+            className="border border-brand-stone px-3 py-1.5 text-sm text-brand-brown bg-white focus:outline-none focus:border-brand-green w-40"
+          />
+          {line.freightOverride === 0 && (
+            <span className="text-xs text-brand-brown/50">Ex gate</span>
+          )}
+        </div>
+      )}
+
       {/* Meta strip */}
       <div className="flex flex-wrap gap-4 text-sm border-t border-brand-stone/40 pt-3">
         <MetaCell label="Tier">
@@ -164,7 +222,13 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
         </MetaCell>
         <MetaCell label="Tonnes">{line.volumeT.toFixed(3)}</MetaCell>
         <MetaCell label="Base Price">{formatCurrency(line.basePrice)}/{line.uom === 'm3' ? 'm³' : 't'}</MetaCell>
-        <MetaCell label="Freight">{line.freight > 0 ? formatCurrency(line.freight) : 'Pickup'}</MetaCell>
+        <MetaCell label="Freight">
+          {isPellet
+            ? (line.freightOverride > 0 ? formatCurrency(line.freightOverride) : 'Ex gate')
+            : blendOpen
+              ? <span className="text-brand-brown/40">Blend</span>
+              : line.freight > 0 ? formatCurrency(line.freight) : 'Pickup'}
+        </MetaCell>
         <MetaCell label="Line Total" highlight>{formatCurrency(line.lineTotal)}</MetaCell>
       </div>
     </div>

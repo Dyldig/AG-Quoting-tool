@@ -178,10 +178,12 @@ export interface OverrideLog {
 export interface ProductLineState {
   id: string
   productId: string
+  productCategory: ProductCategory
   volume: number
   uom: UOM
   basePrice: number
   freight: number
+  freightOverride: number
   lineTotal: number
   volumeT: number
   tier: VolumeTier

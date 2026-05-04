@@ -4,6 +4,9 @@ import { formatCurrency } from '@/lib/pricing'
 
 export const dynamic = 'force-dynamic'
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+const LOGO_SRC = `${APP_URL}/jeffries-logo.jpg`
+
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const view = request.nextUrl.searchParams.get('view') ?? 'customer'
   const isInternal = view === 'internal'
@@ -20,16 +23,34 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
     }
 
+    const hasBlend = !!(quote.blend)
+
+    // Blend cumulative freight
+    const compostLine = hasBlend
+      ? (quote.lines ?? []).find((l: any) => l.product?.category === 'compost')
+      : null
+    const compostFreightRate = hasBlend && quote.fulfilment_type === 'delivery'
+      ? (compostLine?.freight ?? 0)
+      : 0
+    const totalBaseTonnes = (quote.lines ?? []).reduce((s: number, l: any) => s + (l.volume_t ?? 0), 0)
+    const totalAmendmentTonnes = hasBlend
+      ? (quote.blend?.amendments ?? []).reduce((s: number, a: any) => s + a.quantity_tonnes, 0)
+      : 0
+    const blendFreightTotal = compostFreightRate * (totalBaseTonnes + totalAmendmentTonnes)
+
     const productSubtotal = (quote.lines ?? []).reduce((s: number, l: any) => s + l.line_total, 0)
     const blendFeeTotal = quote.blend?.blend_fee_total ?? 0
     const blendAmendmentTotal = (quote.blend?.amendments ?? []).reduce((s: number, a: any) => s + a.line_total, 0)
-    const blendTotal = blendFeeTotal + blendAmendmentTotal
+    const blendTotal = blendFeeTotal + blendAmendmentTotal + blendFreightTotal
     const subtotal = productSubtotal + blendTotal
     const gstAmount = quote.gst_type === 'ex' ? subtotal * 0.1 : 0
     const grandTotal = subtotal + gstAmount
     const effectiveTotal = quote.override_total ?? grandTotal
 
-    const html = generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, effectiveTotal })
+    const html = generatePDFHtml({
+      quote, isInternal, subtotal, gstAmount, grandTotal, effectiveTotal,
+      hasBlend, compostFreightRate, totalBlendTonnes: totalBaseTonnes + totalAmendmentTonnes, blendFreightTotal,
+    })
 
     // Use Puppeteer
     const puppeteer = await import('puppeteer')
@@ -59,23 +80,35 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-function generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, effectiveTotal }: {
+function generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, effectiveTotal, hasBlend, compostFreightRate, totalBlendTonnes, blendFreightTotal }: {
   quote: any
   isInternal: boolean
   subtotal: number
   gstAmount: number
   grandTotal: number
   effectiveTotal: number
+  hasBlend: boolean
+  compostFreightRate: number
+  totalBlendTonnes: number
+  blendFreightTotal: number
 }) {
   const creatorName = (quote.profile as any)?.full_name || null
-  const lineRows = (quote.lines ?? []).map((line: any) => `
+
+  const lineRows = (quote.lines ?? []).map((line: any) => {
+    const isPellet = line.product?.category === 'pellets'
+    const effectiveFreight = isPellet ? (line.freight_override ?? 0) : line.freight
+    const freightLabel = isPellet
+      ? (effectiveFreight > 0 ? formatCurrency(effectiveFreight) : 'Ex gate')
+      : hasBlend ? 'Blend' : (line.freight > 0 ? formatCurrency(line.freight) : 'Pickup')
+
+    return `
     <tr>
       <td>${line.product?.name ?? '—'}<br><small style="color:#888">${line.product?.sku ?? ''} · ${line.uom === 'm3' ? 'm³' : 't'}</small></td>
       <td class="num">${line.volume} ${line.uom === 'm3' ? 'm³' : 't'}</td>
-      ${isInternal ? `<td class="num">${formatCurrency(line.base_price)}</td><td class="num">${line.freight > 0 ? formatCurrency(line.freight) : 'Pickup'}</td>` : ''}
+      ${isInternal ? `<td class="num">${formatCurrency(line.base_price)}</td>${!hasBlend ? `<td class="num">${freightLabel}</td>` : ''}` : ''}
       <td class="num">${formatCurrency(line.line_total)}</td>
     </tr>
-  `).join('')
+  `}).join('')
 
   const blendRows = quote.blend ? (quote.blend.amendments ?? []).map((a: any) => `
     <tr>
@@ -134,12 +167,7 @@ ${isInternal ? '<div class="internal-banner">INTERNAL — CONFIDENTIAL</div>' : 
 <div class="header">
   <div class="header-inner">
     <div class="logo-wrap">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 60" width="293" height="80" fill="none">
-        <path d="M8 48 C8 48 28 44 32 24 C36 4 20 4 16 12 C12 20 14 36 8 48Z" fill="#878800"/>
-        <path d="M8 48 C8 48 2 36 6 24 C10 12 20 12 22 20 C24 28 16 40 8 48Z" fill="#5a5b00"/>
-        <text x="46" y="36" font-family="Georgia, serif" font-size="22" font-weight="bold" fill="#ecdcc8" letter-spacing="1">JEFFRIES</text>
-        <text x="46" y="50" font-family="sans-serif" font-size="9" fill="#878800" letter-spacing="3">AGRICULTURE</text>
-      </svg>
+      <img src="${LOGO_SRC}" style="height:80px;width:auto" alt="Jeffries Agriculture">
     </div>
     <div class="quote-meta">
       <div class="quote-number">${quote.quote_number}</div>
@@ -172,7 +200,7 @@ ${quote.quote_name ? `<div class="section" style="margin-bottom:16px"><div style
       <tr>
         <th>Product</th>
         <th>Volume</th>
-        ${isInternal ? '<th class="num">Base Price</th><th class="num">Freight</th>' : ''}
+        ${isInternal ? `<th class="num">Base Price</th>${!hasBlend ? '<th class="num">Freight</th>' : ''}` : ''}
         <th class="num">Total</th>
       </tr>
     </thead>
@@ -194,10 +222,15 @@ ${quote.blend && (quote.blend.amendments ?? []).length > 0 ? `
     <strong>Blend fee:</strong> ${formatCurrency(quote.blend.blend_fee_rate)}/t × ${(quote.blend.total_base_tonnes + quote.blend.total_amendment_tonnes).toFixed(2)} t = ${formatCurrency(quote.blend.blend_fee_total)}
     (${quote.blend.classification} classification)
   </div>` : ''}
+  ${blendFreightTotal > 0 ? `
+  <div style="margin-top:8px;padding:10px;background:#f7f0e7;">
+    <strong>Blend freight:</strong> ${formatCurrency(compostFreightRate)}/t × ${totalBlendTonnes.toFixed(2)} t = ${formatCurrency(blendFreightTotal)}
+  </div>` : ''}
 </div>` : ''}
 
 <div class="totals">
   ${(quote.blend && (quote.blend.blend_fee_total + ((quote.blend.amendments ?? []).reduce((s: number, a: any) => s + a.line_total, 0))) > 0) ? `<div class="totals-row sub"><span>Blend subtotal</span><span>${formatCurrency(quote.blend.blend_fee_total + (quote.blend.amendments ?? []).reduce((s: number, a: any) => s + a.line_total, 0))}</span></div>` : ''}
+  ${blendFreightTotal > 0 ? `<div class="totals-row sub"><span>Blend freight</span><span>${formatCurrency(blendFreightTotal)}</span></div>` : ''}
   <div class="totals-row sub"><span>Subtotal</span><span>${formatCurrency(subtotal)}</span></div>
   ${quote.gst_type === 'ex' ? `<div class="totals-row sub"><span>GST (10%)</span><span>${formatCurrency(gstAmount)}</span></div>` : ''}
   <div class="totals-row total"><span>TOTAL</span><span>${formatCurrency(effectiveTotal)}</span></div>

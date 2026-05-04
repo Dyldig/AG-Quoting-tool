@@ -15,6 +15,7 @@ export function PricingSummary({ products, pricingRules }: PricingSummaryProps) 
   const blendOpen = useQuoteBuilder((s) => s.blendOpen)
   const gstType = useQuoteBuilder((s) => s.gstType)
   const customerType = useQuoteBuilder((s) => s.customerType)
+  const fulfilmentType = useQuoteBuilder((s) => s.fulfilmentType)
   const overrideEnabled = useQuoteBuilder((s) => s.overrideEnabled)
   const overrideTotal = useQuoteBuilder((s) => s.overrideTotal)
   const setOverrideEnabled = useQuoteBuilder((s) => s.setOverrideEnabled)
@@ -36,7 +37,14 @@ export function PricingSummary({ products, pricingRules }: PricingSummaryProps) 
     blendFeeTotal = feeTotal + amendmentsList.reduce((sum, a) => sum + a.lineTotal, 0)
   }
 
-  const subtotal = productSubtotal + blendFeeTotal
+  // Cumulative blend freight (when blend is open and delivery)
+  const compostLine = blendOpen ? linesList.find(l => l.productCategory === 'compost') : null
+  const compostFreightRate = blendOpen && fulfilmentType === 'delivery' ? (compostLine?.freight ?? 0) : 0
+  const totalBaseTonnes = linesList.reduce((sum, l) => sum + l.volumeT, 0)
+  const totalAmendmentTonnes = amendmentsList.reduce((sum, a) => sum + a.quantityT, 0)
+  const blendFreightTotal = compostFreightRate * (totalBaseTonnes + totalAmendmentTonnes)
+
+  const subtotal = productSubtotal + blendFeeTotal + blendFreightTotal
   const gstAmount = calcGST(subtotal, gstType)
   const grandTotal = subtotal + gstAmount
 
@@ -60,7 +68,7 @@ export function PricingSummary({ products, pricingRules }: PricingSummaryProps) 
             const rrp = customerType === 'distributor'
               ? lookupBasePrice(pricingRules, line.productId, 'customer', line.tier)
               : null
-            const rrpLineTotal = rrp != null ? line.volume * (rrp + line.freight) : null
+            const rrpLineTotal = rrp != null ? line.volume * (rrp + (blendOpen ? 0 : line.freight)) : null
 
             return (
               <div key={line.id} className="flex flex-col gap-1">
@@ -71,7 +79,13 @@ export function PricingSummary({ products, pricingRules }: PricingSummaryProps) 
                 <div className="text-xs text-brand-brown/50 flex gap-3">
                   <span>{line.volume} {line.uom === 'm3' ? 'm³' : 't'}</span>
                   <span>Base: {formatCurrency(line.basePrice)}</span>
-                  <span>Freight: {line.freight > 0 ? formatCurrency(line.freight) : 'Pickup'}</span>
+                  {line.productCategory === 'pellets' ? (
+                    <span>Freight: {line.freightOverride > 0 ? formatCurrency(line.freightOverride) : 'Ex gate'}</span>
+                  ) : blendOpen ? (
+                    <span className="text-brand-brown/30">Freight: blend</span>
+                  ) : (
+                    <span>Freight: {line.freight > 0 ? formatCurrency(line.freight) : 'Pickup'}</span>
+                  )}
                   <span className="uppercase">{line.tier}</span>
                 </div>
                 {rrpLineTotal != null && (
@@ -84,11 +98,19 @@ export function PricingSummary({ products, pricingRules }: PricingSummaryProps) 
           })
         )}
 
-        {/* Blend */}
+        {/* Blend fee + amendments */}
         {blendOpen && blendClassification && (
           <div className="border-t border-brand-stone/40 pt-2 flex justify-between text-sm">
             <span className="text-brand-brown">Blend ({blendClassification})</span>
             <span className="font-medium">{formatCurrency(blendFeeTotal)}</span>
+          </div>
+        )}
+
+        {/* Blend cumulative freight */}
+        {blendOpen && compostFreightRate > 0 && (
+          <div className="flex justify-between text-sm text-brand-brown/70">
+            <span>Blend Freight ({(totalBaseTonnes + totalAmendmentTonnes).toFixed(2)} t × {formatCurrency(compostFreightRate)})</span>
+            <span>{formatCurrency(blendFreightTotal)}</span>
           </div>
         )}
 

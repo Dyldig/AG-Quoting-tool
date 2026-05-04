@@ -255,7 +255,24 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Product lines
+      // ── Compute blend cumulative freight (if applicable) ────────────────────
+      const hasBlend = !!(quote.blend)
+      const compostLineForFreight = hasBlend
+        ? (quote.lines ?? []).find((l: any) => l.product?.category === 'compost')
+        : null
+      const blendCompostFreightRate = hasBlend && quote.fulfilment_type === 'delivery'
+        ? (compostLineForFreight?.freight ?? 0)
+        : 0
+      const blendTotalBaseTonnes = (quote.lines ?? []).reduce((s: number, l: any) => s + (l.volume_t ?? 0), 0)
+      const blendTotalAmendTonnes = hasBlend
+        ? ((quote.blend as any).amendments ?? []).reduce((s: number, a: any) => s + a.quantity_tonnes, 0)
+        : 0
+      const blendTotalTonnes = blendTotalBaseTonnes + blendTotalAmendTonnes
+      const blendFreightTotal = blendCompostFreightRate * blendTotalTonnes
+
+      // ── Order: products → [per-line freight if no blend] → amendments → fee → cumulative freight ──
+
+      // 1. Product lines
       for (const line of (quote.lines ?? [])) {
         const sku: string = (line as any).product?.sku
         if (!sku) continue
@@ -274,23 +291,34 @@ export async function POST(request: NextRequest) {
           description: `${regionName} | ${(line as any).uom} | ${(line as any).volume_t >= 150 ? 'bulk' : 'standard'}`,
         })
         if (id) await associateToDeal(id)
+      }
 
-        // Per-line freight item (if delivery and freight > 0)
-        if (quote.fulfilment_type === 'delivery' && (line as any).freight > 0) {
-          const freightId = await createLineItem({
-            hs_product_id: HUBSPOT_ANCILLARY_IDS.freight,
-            quantity: String((line as any).volume),
-            price: String((line as any).freight),
-            name: 'Freight',
-            description: `${regionName} | ${(line as any).product?.name ?? sku}`,
-          })
-          if (freightId) await associateToDeal(freightId)
+      // 2. Per-line freight (non-blend only)
+      if (!hasBlend && quote.fulfilment_type === 'delivery') {
+        for (const line of (quote.lines ?? [])) {
+          const sku: string = (line as any).product?.sku
+          const isPellet = (line as any).product?.category === 'pellets'
+          const effectiveFreight = isPellet
+            ? ((line as any).freight_override ?? 0)
+            : (line as any).freight
+
+          if (effectiveFreight > 0) {
+            const freightId = await createLineItem({
+              hs_product_id: HUBSPOT_ANCILLARY_IDS.freight,
+              quantity: String((line as any).volume),
+              price: String(effectiveFreight),
+              name: 'Freight',
+              description: `${regionName} | ${(line as any).product?.name ?? sku}`,
+            })
+            if (freightId) await associateToDeal(freightId)
+          }
         }
       }
 
-      // Blend amendments + fee
+      // 3. Blend amendments + fee + cumulative freight
       if (quote.blend) {
         const blendAmendments: any[] = (quote.blend as any).amendments ?? []
+
         for (const ba of blendAmendments) {
           const amendSku: string = ba.amendment?.sku
           if (!amendSku) continue
@@ -306,19 +334,30 @@ export async function POST(request: NextRequest) {
           if (baId) await associateToDeal(baId)
         }
 
-        // Blend fee line item
+        // Blend fee
         const feeHsId = quote.blend.classification === 'complex'
           ? HUBSPOT_ANCILLARY_IDS.complexBlendFee
           : HUBSPOT_ANCILLARY_IDS.simpleBlendFee
-        const totalBlendTonnes = quote.blend.total_base_tonnes + quote.blend.total_amendment_tonnes
         const feeId = await createLineItem({
           hs_product_id: feeHsId,
-          quantity: String(totalBlendTonnes.toFixed(3)),
+          quantity: String(blendTotalTonnes.toFixed(3)),
           price: String(quote.blend.blend_fee_rate),
           name: `Blend Fee (${quote.blend.classification})`,
           description: `${quote.blend.classification} blend classification`,
         })
         if (feeId) await associateToDeal(feeId)
+
+        // Cumulative blend freight (last)
+        if (blendFreightTotal > 0) {
+          const freightId = await createLineItem({
+            hs_product_id: HUBSPOT_ANCILLARY_IDS.freight,
+            quantity: String(blendTotalTonnes.toFixed(3)),
+            price: String(blendCompostFreightRate),
+            name: 'Blend Freight',
+            description: `${regionName} | cumulative blend freight`,
+          })
+          if (freightId) await associateToDeal(freightId)
+        }
       }
 
       lineItemsPushed = true

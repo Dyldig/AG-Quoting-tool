@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
+import { enableMapSet } from 'immer'
 import type {
   CustomerType,
   FulfilmentType,
@@ -9,6 +10,9 @@ import type {
   BlendAmendmentState,
   AmendmentType,
 } from '@/lib/types'
+
+// REQUIRED: do not remove — enables Map/Set support in Immer
+enableMapSet()
 
 interface QuoteBuilderStore {
   // Customer info
@@ -111,10 +115,12 @@ export const useQuoteBuilder = create<QuoteBuilderStore>()(
         state.lines.set(lineId, {
           id: lineId,
           productId,
+          productCategory: 'compost',  // updated by ProductLine on first recalc
           volume: 0,
           uom,
           basePrice: 0,
           freight: 0,
+          freightOverride: 0,
           lineTotal: 0,
           volumeT: 0,
           tier: 'standard',

@@ -36,17 +36,25 @@ export function QuoteActions({ existingQuoteId, disclaimerRequired }: QuoteActio
       const productSubtotal = linesList.reduce((s, l) => s + l.lineTotal, 0)
       let blendFeeTotal = 0
       let blendClassification: 'simple' | 'complex' | null = null
+      const totalBaseTonnes = linesList.reduce((s, l) => s + l.volumeT, 0)
+      const totalAmendmentTonnes = amendmentsList.reduce((s, a) => s + a.quantityT, 0)
 
       if (store.blendOpen && amendmentsList.length > 0) {
         const cls = classifyBlend(amendmentsList, false)
         blendClassification = cls
-        const totalBaseTonnes = linesList.reduce((s, l) => s + l.volumeT, 0)
-        const totalAmendmentTonnes = amendmentsList.reduce((s, a) => s + a.quantityT, 0)
         const { feeTotal } = calcBlendFee(cls, totalBaseTonnes + totalAmendmentTonnes)
         blendFeeTotal = feeTotal + amendmentsList.reduce((s, a) => s + a.lineTotal, 0)
       }
 
-      const subtotal = productSubtotal + blendFeeTotal
+      // Cumulative blend freight
+      let blendFreightTotal = 0
+      if (store.blendOpen && store.fulfilmentType === 'delivery') {
+        const compostLine = linesList.find(l => l.productCategory === 'compost')
+        const compostFreightRate = compostLine?.freight ?? 0
+        blendFreightTotal = compostFreightRate * (totalBaseTonnes + totalAmendmentTonnes)
+      }
+
+      const subtotal = productSubtotal + blendFeeTotal + blendFreightTotal
       const gstAmount = calcGST(subtotal, store.gstType)
       const grandTotal = subtotal + gstAmount
 
@@ -95,6 +103,7 @@ export function QuoteActions({ existingQuoteId, disclaimerRequired }: QuoteActio
             volume_t: l.volumeT,
             base_price: l.basePrice,
             freight: l.freight,
+            freight_override: l.freightOverride,
             line_total: l.lineTotal,
             sort_order: idx,
           }))

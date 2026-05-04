@@ -185,6 +185,7 @@ function AddAmendmentControls({ amendments }: { amendments: Amendment[] }) {
 function BlendTotalsStrip() {
   const blendAmendments = useQuoteBuilder((s) => s.blendAmendments)
   const lines = useQuoteBuilder((s) => s.lines)
+  const fulfilmentType = useQuoteBuilder((s) => s.fulfilmentType)
 
   const linesList = Array.from(lines.values())
   const hasJOC = false // JOC detection deferred to page level
@@ -196,6 +197,11 @@ function BlendTotalsStrip() {
   const totalBlendTonnes = totalBaseTonnes + totalAmendmentTonnes
   const { feeRate, feeTotal } = calcBlendFee(classification, totalBlendTonnes)
   const amendmentsCost = amendmentsList.reduce((sum, a) => sum + a.lineTotal, 0)
+
+  // Cumulative freight: compost rate × total blend tonnes
+  const compostLine = linesList.find(l => l.productCategory === 'compost')
+  const compostFreightRate = fulfilmentType === 'delivery' ? (compostLine?.freight ?? 0) : 0
+  const blendFreightTotal = compostFreightRate * totalBlendTonnes
 
   return (
     <div className="border-t border-brand-stone pt-3 flex flex-wrap gap-6 items-center">
@@ -209,8 +215,11 @@ function BlendTotalsStrip() {
       <MetaCell label="Amendment t">{totalAmendmentTonnes.toFixed(3)}</MetaCell>
       <MetaCell label="Blend Fee">{formatCurrency(feeRate)}/t × {totalBlendTonnes.toFixed(2)} t = {formatCurrency(feeTotal)}</MetaCell>
       <MetaCell label="Amendments Cost">{formatCurrency(amendmentsCost)}</MetaCell>
+      {compostFreightRate > 0 && (
+        <MetaCell label="Blend Freight">{formatCurrency(compostFreightRate)}/t × {totalBlendTonnes.toFixed(2)} t = {formatCurrency(blendFreightTotal)}</MetaCell>
+      )}
       <MetaCell label="Blend Subtotal" highlight>
-        {formatCurrency(feeTotal + amendmentsCost)}
+        {formatCurrency(feeTotal + amendmentsCost + blendFreightTotal)}
       </MetaCell>
     </div>
   )
