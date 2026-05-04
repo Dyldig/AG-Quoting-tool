@@ -34,6 +34,9 @@ interface QuoteBuilderStore {
   overrideEnabled: boolean
   overrideTotal: number | null
 
+  // Disclaimer
+  disclaimerAcknowledged: boolean
+
   // Loaded quote ID (for editing)
   loadedQuoteId: string | null
 
@@ -57,6 +60,8 @@ interface QuoteBuilderStore {
   setOverrideEnabled: (enabled: boolean) => void
   setOverrideTotal: (total: number | null) => void
 
+  setDisclaimerAcknowledged: (value: boolean) => void
+
   resetQuote: () => void
   loadQuote: (quoteId: string, data: Partial<QuoteBuilderStore>) => void
 }
@@ -77,6 +82,7 @@ const defaultState = {
   blendAmendments: new Map<string, BlendAmendmentState>(),
   overrideEnabled: false,
   overrideTotal: null,
+  disclaimerAcknowledged: false,
   loadedQuoteId: null,
 }
 
@@ -173,6 +179,9 @@ export const useQuoteBuilder = create<QuoteBuilderStore>()(
 
     setOverrideTotal: (total) =>
       set((state) => { state.overrideTotal = total }),
+
+    setDisclaimerAcknowledged: (value) =>
+      set((state) => { state.disclaimerAcknowledged = value }),
 
     resetQuote: () =>
       set(() => ({

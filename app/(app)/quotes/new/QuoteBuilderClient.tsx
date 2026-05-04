@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PlusIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { useQuoteBuilder } from '@/store/quoteBuilder'
 import { QuoteSettingsBar } from '@/components/quote-builder/QuoteSettingsBar'
 import { CustomerFields } from '@/components/quote-builder/CustomerFields'
@@ -9,7 +9,11 @@ import { ProductLine } from '@/components/quote-builder/ProductLine'
 import { BlendSection } from '@/components/quote-builder/BlendSection'
 import { PricingSummary } from '@/components/quote-builder/PricingSummary'
 import { QuoteActions } from '@/components/quote-builder/QuoteActions'
-import type { Product, PricingRule, FreightMatrix, Region, Amendment } from '@/lib/types'
+import type { Product, PricingRule, FreightMatrix, Region, Amendment, UOM } from '@/lib/types'
+
+const DISCLAIMER_SKUS = new Set(['SCORGCOM25', 'MUDURMUL', 'SCGRCHCOM'])
+
+const DISCLAIMER_TEXT = `Please note that Jeffries Commercial Compost is a commercial product and may contain inorganic foreign material. While we do our best to minimise inorganics through innovative technologies, the nature of the product means it may not always meet the specific requirements for certain applications. Prior to order, you should assess whether this product is suitable for your intended purpose. For applications requiring a more refined product, we recommend Jeffries Organic Compost.`
 
 interface QuoteBuilderClientProps {
   products: Product[]
@@ -30,6 +34,8 @@ export function QuoteBuilderClient({
   const addLine = useQuoteBuilder((s) => s.addLine)
   const resetQuote = useQuoteBuilder((s) => s.resetQuote)
   const regionId = useQuoteBuilder((s) => s.regionId)
+  const disclaimerAcknowledged = useQuoteBuilder((s) => s.disclaimerAcknowledged)
+  const setDisclaimerAcknowledged = useQuoteBuilder((s) => s.setDisclaimerAcknowledged)
 
   const [selectedProduct, setSelectedProduct] = useState(products[0]?.id ?? '')
 
@@ -38,11 +44,20 @@ export function QuoteBuilderClient({
     resetQuote()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Determine if any current product line requires a disclaimer
+  const hasDisclaimerProduct = Array.from(lines.values()).some((line) => {
+    const product = products.find((p) => p.id === line.productId)
+    return product && DISCLAIMER_SKUS.has(product.sku)
+  })
+
   function handleAddProduct() {
     if (!selectedProduct) return
-    // New lines inherit the current region's default UOM
-    const region = regions.find((r) => r.id === regionId)
-    addLine(selectedProduct, region?.default_uom ?? 'm3')
+    const product = products.find((p) => p.id === selectedProduct)
+    // Pellets always use tonnes; other products inherit the region default
+    const uom: UOM = product?.category === 'pellets'
+      ? 't'
+      : (regions.find((r) => r.id === regionId)?.default_uom ?? 'm3')
+    addLine(selectedProduct, uom)
   }
 
   return (
@@ -105,6 +120,30 @@ export function QuoteBuilderClient({
           <BlendSection amendments={amendments} />
         </div>
 
+        {/* Disclaimer banner */}
+        {hasDisclaimerProduct && (
+          <div className="border border-amber-300 bg-amber-50 p-4 flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <ExclamationTriangleIcon className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-900 mb-1">Product Disclaimer</p>
+                <p className="text-sm text-amber-800 leading-relaxed">{DISCLAIMER_TEXT}</p>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer ml-8">
+              <input
+                type="checkbox"
+                checked={disclaimerAcknowledged}
+                onChange={(e) => setDisclaimerAcknowledged(e.target.checked)}
+                className="w-4 h-4 accent-amber-700"
+              />
+              <span className="text-sm text-amber-900">
+                I confirm the customer has been informed of and acknowledges this product disclaimer
+              </span>
+            </label>
+          </div>
+        )}
+
         {/* Pricing summary */}
         <PricingSummary products={products} pricingRules={pricingRules} />
 
@@ -115,7 +154,7 @@ export function QuoteBuilderClient({
         </div>
 
         {/* Actions */}
-        <QuoteActions />
+        <QuoteActions disclaimerRequired={hasDisclaimerProduct} />
       </div>
     </div>
   )

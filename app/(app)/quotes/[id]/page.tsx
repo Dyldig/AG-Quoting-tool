@@ -19,7 +19,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   ] = await Promise.all([
     supabase
       .from('quotes')
-      .select('*, region:regions(*), lines:quote_lines(*, product:products(*)), blend:quote_blends(*, amendments:blend_amendments(*, amendment:amendments(*)))')
+      .select('*, region:regions(*), lines:quote_lines(*, product:products(*)), blend:quote_blends(*, amendments:blend_amendments(*, amendment:amendments(*))), profile:profiles!created_by(full_name)')
       .eq('id', params.id)
       .single(),
     supabase.from('products').select('*').eq('active', true).order('name'),

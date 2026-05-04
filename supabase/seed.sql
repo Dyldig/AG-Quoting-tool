@@ -145,9 +145,37 @@ INSERT INTO freight_matrix (region_id, product_category, price_per_unit, effecti
 SELECT r.id, 'mulch', 25.50, '2026-01-01' FROM regions r WHERE r.name = 'Mildura Z3';
 
 -- ============================================================
+-- PELLET PRODUCTS
+-- ============================================================
+
+INSERT INTO products (name, sku, category, conversion_factor_m3_to_t) VALUES
+  ('Jeffries C-100',   'SCC100',  'pellets', 1.0),
+  ('Jeffries CulChar', 'CULCHAR', 'pellets', 1.0),
+  ('Jeffries Biochar', 'BIOCHAR', 'pellets', 1.0);
+
+-- Pellet pricing rules (standard tier only — no bulk variant)
+INSERT INTO pricing_rules (product_id, customer_type, volume_tier, price_per_unit, effective_date)
+SELECT p.id, 'distributor', 'standard', 315.00, '2026-01-01' FROM products p WHERE p.sku = 'SCC100';
+INSERT INTO pricing_rules (product_id, customer_type, volume_tier, price_per_unit, effective_date)
+SELECT p.id, 'customer',    'standard', 350.00, '2026-01-01' FROM products p WHERE p.sku = 'SCC100';
+
+INSERT INTO pricing_rules (product_id, customer_type, volume_tier, price_per_unit, effective_date)
+SELECT p.id, 'distributor', 'standard', 387.00, '2026-01-01' FROM products p WHERE p.sku = 'CULCHAR';
+INSERT INTO pricing_rules (product_id, customer_type, volume_tier, price_per_unit, effective_date)
+SELECT p.id, 'customer',    'standard', 430.00, '2026-01-01' FROM products p WHERE p.sku = 'CULCHAR';
+
+INSERT INTO pricing_rules (product_id, customer_type, volume_tier, price_per_unit, effective_date)
+SELECT p.id, 'distributor', 'standard', 900.00, '2026-01-01' FROM products p WHERE p.sku = 'BIOCHAR';
+INSERT INTO pricing_rules (product_id, customer_type, volume_tier, price_per_unit, effective_date)
+SELECT p.id, 'customer',    'standard', 1000.00, '2026-01-01' FROM products p WHERE p.sku = 'BIOCHAR';
+
+-- ============================================================
 -- AMENDMENTS
 -- ============================================================
 
 INSERT INTO amendments (name, sku, type, price_per_tonne, is_internal) VALUES
-  ('Gypsum', 'SCGYP', 'bulk', 46.50, TRUE),
-  ('Lime', 'SCLIM', 'bulk', 75.50, TRUE);
+  ('Gypsum',           'SCGYP',  'bulk', 46.50,  TRUE),
+  ('Lime',             'SCLIM',  'bulk', 75.50,  TRUE),
+  ('Jeffries C-100',   'SCC100', 'bulk', 315.00, TRUE),
+  ('Jeffries CulChar', 'CULCHAR','bulk', 387.00, TRUE),
+  ('Jeffries Biochar', 'BIOCHAR','bulk', 900.00, TRUE);

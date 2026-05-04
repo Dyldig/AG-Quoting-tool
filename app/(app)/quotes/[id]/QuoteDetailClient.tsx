@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import { ArrowLeftIcon, DocumentArrowDownIcon, EnvelopeIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentArrowDownIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge, Badge } from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/pricing'
@@ -24,12 +24,12 @@ interface QuoteDetailClientProps {
 export function QuoteDetailClient({ quote, regions, overrideLogs }: QuoteDetailClientProps) {
   const [status, setStatus] = useState<QuoteStatus>(quote.status)
   const [updating, setUpdating] = useState(false)
-  const [emailSending, setEmailSending] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const supabase = createClient()
   const region = regions.find((r) => r.id === quote.region_id)
+  const creatorName = (quote.profile as any)?.full_name || null
 
   async function updateStatus(newStatus: QuoteStatus) {
     setUpdating(true)
@@ -37,18 +37,6 @@ export function QuoteDetailClient({ quote, regions, overrideLogs }: QuoteDetailC
     if (err) setError(err.message)
     else setStatus(newStatus)
     setUpdating(false)
-  }
-
-  async function sendEmail() {
-    setEmailSending(true)
-    try {
-      const res = await fetch(`/api/quotes/${quote.id}/email`, { method: 'POST' })
-      if (!res.ok) throw new Error('Email failed')
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setEmailSending(false)
-    }
   }
 
   async function syncHubSpot() {
@@ -93,6 +81,7 @@ export function QuoteDetailClient({ quote, regions, overrideLogs }: QuoteDetailC
             </div>
             <p className="text-sm text-brand-brown/50 mt-0.5">
               Created {format(new Date(quote.created_at), 'dd MMM yyyy HH:mm')}
+              {creatorName && <span className="ml-2">· by {creatorName}</span>}
               {quote.valid_until && (
                 <span className="ml-3">
                   · Valid until{' '}
@@ -118,10 +107,6 @@ export function QuoteDetailClient({ quote, regions, overrideLogs }: QuoteDetailC
               Internal PDF
             </Button>
           </a>
-          <Button variant="secondary" size="sm" onClick={sendEmail} loading={emailSending}>
-            <EnvelopeIcon className="w-4 h-4" />
-            {quote.email_sent_at ? 'Re-send Email' : 'Send Email'}
-          </Button>
           <Button variant="ghost" size="sm" onClick={syncHubSpot} loading={syncing}>
             <ArrowPathIcon className="w-4 h-4" />
             HubSpot Sync

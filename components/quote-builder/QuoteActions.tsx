@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { DocumentArrowDownIcon, EnvelopeIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { DocumentArrowDownIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/Button'
 import { useQuoteBuilder } from '@/store/quoteBuilder'
 import { createClient } from '@/lib/supabase/client'
@@ -10,12 +10,12 @@ import { classifyBlend, calcBlendFee, calcGST } from '@/lib/pricing'
 
 interface QuoteActionsProps {
   existingQuoteId?: string
+  disclaimerRequired?: boolean
 }
 
-export function QuoteActions({ existingQuoteId }: QuoteActionsProps) {
+export function QuoteActions({ existingQuoteId, disclaimerRequired }: QuoteActionsProps) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
-  const [emailSending, setEmailSending] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [savedQuoteId, setSavedQuoteId] = useState<string | null>(existingQuoteId ?? null)
   const [error, setError] = useState<string | null>(null)
@@ -64,6 +64,8 @@ export function QuoteActions({ existingQuoteId }: QuoteActionsProps) {
         hubspot_deal_id: store.hubspotDealId || null,
         override_total: store.overrideEnabled && store.overrideTotal != null ? store.overrideTotal : null,
         notes: store.notes || null,
+        disclaimer_acknowledged: store.disclaimerAcknowledged,
+        disclaimer_acknowledged_at: store.disclaimerAcknowledged ? new Date().toISOString() : null,
       }
 
       let quoteId = savedQuoteId
@@ -160,21 +162,6 @@ export function QuoteActions({ existingQuoteId }: QuoteActionsProps) {
     if (id) window.open(`/api/quotes/${id}/pdf?view=customer`, '_blank')
   }
 
-  async function handleEmailCustomer() {
-    const id = savedQuoteId ?? (await saveQuote('sent'))
-    if (!id) return
-    setEmailSending(true)
-    try {
-      const res = await fetch(`/api/quotes/${id}/email`, { method: 'POST' })
-      if (!res.ok) throw new Error('Email failed')
-      router.refresh()
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setEmailSending(false)
-    }
-  }
-
   async function handleHubSpotSync() {
     const id = savedQuoteId ?? (await saveQuote())
     if (!id) return
@@ -201,16 +188,19 @@ export function QuoteActions({ existingQuoteId }: QuoteActionsProps) {
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={handleGenerateQuote} loading={saving} size="lg">
-          Generate Quote
-        </Button>
+        <span title={disclaimerRequired && !store.disclaimerAcknowledged ? 'Customer disclaimer acknowledgement required' : undefined}>
+          <Button
+            onClick={handleGenerateQuote}
+            loading={saving}
+            size="lg"
+            disabled={!!(disclaimerRequired && !store.disclaimerAcknowledged)}
+          >
+            Generate Quote
+          </Button>
+        </span>
         <Button variant="secondary" onClick={handlePreviewPDF} disabled={saving}>
           <DocumentArrowDownIcon className="w-4 h-4" />
           Preview PDF
-        </Button>
-        <Button variant="secondary" onClick={handleEmailCustomer} loading={emailSending}>
-          <EnvelopeIcon className="w-4 h-4" />
-          Email Customer
         </Button>
         <Button variant="ghost" onClick={handleHubSpotSync} loading={syncing}>
           <ArrowPathIcon className="w-4 h-4" />

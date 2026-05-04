@@ -34,11 +34,13 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
     (vol?: number, u?: UOM, pid?: string) => {
       if (!line) return
       const volume = vol ?? volumeValueRef.current
-      const uom = u ?? line.uom
       const productId = pid ?? line.productId
 
       const product = products.find((p) => p.id === productId)
       if (!product) return
+
+      // Pellets are always tonnes — ignore region/user UOM selection
+      const uom: UOM = product.category === 'pellets' ? 't' : (u ?? line.uom)
 
       const volT = calcVolumeTonnes(volume, uom, product)
       const tier = calcTier(volT)
@@ -95,6 +97,9 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
 
   if (!line) return null
 
+  const currentProduct = products.find((p) => p.id === line.productId)
+  const isPellet = currentProduct?.category === 'pellets'
+
   return (
     <div className="bg-white border border-brand-stone p-4 flex flex-col gap-3">
       {/* Header row */}
@@ -124,14 +129,20 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
               placeholder="0"
               className="flex-1 px-3 py-2 text-sm text-brand-brown bg-white focus:outline-none min-w-0"
             />
-            <select
-              value={line.uom}
-              onChange={(e) => recalcRef.current(undefined, e.target.value as UOM)}
-              className="border-l border-brand-stone bg-white px-2 py-2 text-sm text-brand-brown focus:outline-none"
-            >
-              <option value="m3">m³</option>
-              <option value="t">t</option>
-            </select>
+            {isPellet ? (
+              <span className="border-l border-brand-stone bg-brand-stone-light px-3 py-2 text-sm text-brand-brown/60 select-none">
+                t
+              </span>
+            ) : (
+              <select
+                value={line.uom}
+                onChange={(e) => recalcRef.current(undefined, e.target.value as UOM)}
+                className="border-l border-brand-stone bg-white px-2 py-2 text-sm text-brand-brown focus:outline-none"
+              >
+                <option value="m3">m³</option>
+                <option value="t">t</option>
+              </select>
+            )}
           </div>
         </div>
 

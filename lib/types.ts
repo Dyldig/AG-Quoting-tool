@@ -3,7 +3,7 @@
 export type UserRole = 'sales_rep' | 'sales_manager' | 'admin'
 export type CustomerType = 'distributor' | 'customer'
 export type VolumeTier = 'standard' | 'bulk'
-export type ProductCategory = 'compost' | 'mulch'
+export type ProductCategory = 'compost' | 'mulch' | 'pellets'
 export type AmendmentType = 'bulk' | 'liquid' | 'bagged'
 export type FulfilmentType = 'delivery' | 'pickup'
 export type GstType = 'ex' | 'inc'
@@ -96,6 +96,8 @@ export interface Quote {
   override_total: number | null
   override_approved_by: string | null
   notes: string | null
+  disclaimer_acknowledged: boolean | null
+  disclaimer_acknowledged_at: string | null
   region?: Region
   lines?: QuoteLine[]
   blend?: QuoteBlend

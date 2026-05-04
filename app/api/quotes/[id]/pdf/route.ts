@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const supabase = await createServiceClient()
     const { data: quote, error } = await supabase
       .from('quotes')
-      .select('*, region:regions(*), lines:quote_lines(*, product:products(*)), blend:quote_blends(*, amendments:blend_amendments(*, amendment:amendments(*)))')
+      .select('*, region:regions(*), lines:quote_lines(*, product:products(*)), blend:quote_blends(*, amendments:blend_amendments(*, amendment:amendments(*))), profile:profiles!created_by(full_name)')
       .eq('id', params.id)
       .single()
 
@@ -67,6 +67,7 @@ function generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, e
   grandTotal: number
   effectiveTotal: number
 }) {
+  const creatorName = (quote.profile as any)?.full_name || null
   const lineRows = (quote.lines ?? []).map((line: any) => `
     <tr>
       <td>${line.product?.name ?? '—'}<br><small style="color:#888">${line.product?.sku ?? ''} · ${line.uom === 'm3' ? 'm³' : 't'}</small></td>
@@ -99,8 +100,7 @@ function generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, e
   body { font-family: 'DM Sans', sans-serif; font-size: 11pt; color: #31261D; line-height: 1.5; }
   .header { background: #31261D; color: white; padding: 20px 0; margin-bottom: 32px; }
   .header-inner { display: flex; justify-content: space-between; align-items: center; }
-  .logo-wrap { display: flex; align-items: center; gap: 14px; }
-  .logo-tagline { color: #ecdcc8; font-size: 8.5pt; margin-top: 2px; letter-spacing: 0.04em; }
+  .logo-wrap { display: flex; align-items: center; }
   .quote-meta { text-align: right; }
   .quote-number { font-size: 16pt; font-weight: 500; }
   .quote-date { color: #ecdcc8; font-size: 9pt; margin-top: 4px; }
@@ -118,6 +118,7 @@ function generatePDFHtml({ quote, isInternal, subtotal, gstAmount, grandTotal, e
   .totals-row.total { font-weight: 500; font-size: 13pt; color: #878800; border-top: 2px solid #878800; margin-top: 6px; padding-top: 10px; }
   .totals-row.sub { color: #666; }
   .override-note { background: #fff8e1; border: 1px solid #f59e0b; padding: 10px 14px; margin-top: 16px; font-size: 9pt; }
+  .disclaimer-note { background: #f7f0e7; border-left: 3px solid #878800; padding: 8px 12px; margin-top: 16px; font-size: 9pt; color: #31261D; }
   .validity { font-size: 9pt; color: #888; margin-top: 24px; border-top: 1px solid #ecdcc8; padding-top: 16px; }
   .conditions { margin-top: 32px; border-top: 2px solid #878800; padding-top: 20px; }
   .conditions h3 { font-size: 9pt; font-weight: 500; color: #31261D; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; margin-top: 16px; }
@@ -133,18 +134,18 @@ ${isInternal ? '<div class="internal-banner">INTERNAL — CONFIDENTIAL</div>' : 
 <div class="header">
   <div class="header-inner">
     <div class="logo-wrap">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 60" width="140" height="38" fill="none">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 60" width="293" height="80" fill="none">
         <path d="M8 48 C8 48 28 44 32 24 C36 4 20 4 16 12 C12 20 14 36 8 48Z" fill="#878800"/>
         <path d="M8 48 C8 48 2 36 6 24 C10 12 20 12 22 20 C24 28 16 40 8 48Z" fill="#5a5b00"/>
         <text x="46" y="36" font-family="Georgia, serif" font-size="22" font-weight="bold" fill="#ecdcc8" letter-spacing="1">JEFFRIES</text>
         <text x="46" y="50" font-family="sans-serif" font-size="9" fill="#878800" letter-spacing="3">AGRICULTURE</text>
       </svg>
-      <div class="logo-tagline">Compost · Mulch · Soil Amendments</div>
     </div>
     <div class="quote-meta">
       <div class="quote-number">${quote.quote_number}</div>
       ${quote.quote_name ? `<div style="color:#ecdcc8;font-size:9pt;margin-top:3px">${quote.quote_name}</div>` : ''}
       <div class="quote-date">${new Date(quote.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+      ${creatorName ? `<div style="color:#ecdcc8;font-size:8.5pt;margin-top:2px">Prepared by: ${creatorName}</div>` : ''}
       <div style="color:#ecdcc8;font-size:8.5pt;margin-top:3px">Valid until <strong style="color:white">${validUntil}</strong></div>
       <div style="margin-top:8px;display:inline-block;background:#878800;color:white;padding:3px 10px;font-size:9pt;font-weight:500;text-transform:capitalize">${quote.status}</div>
     </div>
@@ -204,6 +205,11 @@ ${quote.blend && (quote.blend.amendments ?? []).length > 0 ? `
 </div>
 
 ${quote.notes ? `<div class="section" style="margin-top:24px"><h2>Notes</h2><p>${quote.notes}</p></div>` : ''}
+
+${isInternal && quote.disclaimer_acknowledged && quote.disclaimer_acknowledged_at ? `
+<div class="disclaimer-note">
+  ✓ Customer disclaimer acknowledged by sales representative on ${new Date(quote.disclaimer_acknowledged_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}${creatorName ? ` (${creatorName})` : ''}.
+</div>` : ''}
 
 ${!isInternal ? `
 <div class="conditions">

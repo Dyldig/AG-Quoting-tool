@@ -61,7 +61,13 @@ export function Nav({ profile }: NavProps) {
 
         <div className="flex items-center gap-3 shrink-0">
           {profile && (
-            <span className="text-xs text-white/60">{profile.full_name || profile.role}</span>
+            <Link
+              href="/settings/profile"
+              className="text-xs text-white/60 hover:text-white transition-colors"
+              title="Profile settings"
+            >
+              {profile.full_name || profile.role}
+            </Link>
           )}
           <button
             onClick={handleSignOut}
