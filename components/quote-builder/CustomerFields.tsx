@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuoteBuilder } from '@/store/quoteBuilder'
 import { Input } from '@/components/ui/Input'
 import type { Region } from '@/lib/types'
@@ -19,12 +20,33 @@ export function CustomerFields({ regions }: CustomerFieldsProps) {
   const setRegionId = useQuoteBuilder((s) => s.setRegionId)
   const setAllLinesUom = useQuoteBuilder((s) => s.setAllLinesUom)
 
+  const [prefilling, setPrefilling] = useState(false)
+  const [prefillStatus, setPrefillStatus] = useState<'idle' | 'success' | 'error'>('idle')
+
   function handleRegionChange(id: string) {
     const selected = regions.find((r) => r.id === id)
     setRegionId(id, selected?.default_uom)
-    if (selected) {
-      // Auto-set all existing product lines to the region's default UOM
-      setAllLinesUom(selected.default_uom)
+    if (selected) setAllLinesUom(selected.default_uom)
+  }
+
+  async function handleDealIdBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const val = e.target.value.trim()
+    if (!val) return
+    setPrefilling(true)
+    setPrefillStatus('idle')
+    try {
+      const res = await fetch(`/api/hubspot/deal?dealId=${encodeURIComponent(val)}`)
+      if (!res.ok) throw new Error('Deal not found')
+      const data = await res.json()
+      if (!customerName && data.company) setCustomerField('customerName', data.company)
+      if (!contactName && data.contactName) setCustomerField('contactName', data.contactName)
+      if (!email && data.email) setCustomerField('email', data.email)
+      if (!quoteName && data.quoteName) setCustomerField('quoteName', data.quoteName)
+      setPrefillStatus('success')
+    } catch {
+      setPrefillStatus('error')
+    } finally {
+      setPrefilling(false)
     }
   }
 
@@ -77,12 +99,28 @@ export function CustomerFields({ regions }: CustomerFieldsProps) {
             ))}
           </select>
         </div>
-        <Input
-          label="HubSpot Deal ID"
-          value={hubspotDealId}
-          onChange={(e) => setCustomerField('hubspotDealId', e.target.value)}
-          placeholder="Optional"
-        />
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-brand-brown uppercase tracking-wide">
+            HubSpot Deal ID
+          </label>
+          <input
+            type="text"
+            defaultValue={hubspotDealId}
+            onChange={(e) => setCustomerField('hubspotDealId', e.target.value)}
+            onBlur={handleDealIdBlur}
+            placeholder="Paste deal ID to auto-fill"
+            className="border border-brand-stone bg-white px-3 py-2 text-sm text-brand-brown w-full focus:outline-none focus:border-brand-green"
+          />
+          {prefilling && (
+            <span className="text-xs text-brand-brown/50">Fetching from HubSpot...</span>
+          )}
+          {prefillStatus === 'success' && !prefilling && (
+            <span className="text-xs text-brand-green">✓ Customer details pre-filled from HubSpot</span>
+          )}
+          {prefillStatus === 'error' && !prefilling && (
+            <span className="text-xs text-red-500">Deal not found — check the ID and try again</span>
+          )}
+        </div>
       </div>
     </div>
   )
