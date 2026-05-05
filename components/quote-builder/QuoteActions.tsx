@@ -95,18 +95,22 @@ export function QuoteActions({ existingQuoteId, disclaimerRequired }: QuoteActio
       // Insert lines
       if (linesList.length > 0) {
         await supabase.from('quote_lines').insert(
-          linesList.map((l, idx) => ({
-            quote_id: quoteId,
-            product_id: l.productId,
-            volume: l.volume,
-            uom: l.uom,
-            volume_t: l.volumeT,
-            base_price: l.basePrice,
-            freight: l.freight,
-            freight_override: l.freightOverride,
-            line_total: l.lineTotal,
-            sort_order: idx,
-          }))
+          linesList.map((l, idx) => {
+            // Blend compost: save tonne-converted volume so PDF/HubSpot use tonne values
+            const isBlendCompost = store.blendOpen && l.productCategory === 'compost'
+            return {
+              quote_id: quoteId,
+              product_id: l.productId,
+              volume: isBlendCompost ? l.volumeT : l.volume,
+              uom: isBlendCompost ? 't' : l.uom,
+              volume_t: l.volumeT,
+              base_price: l.basePrice,
+              freight: l.freight,
+              freight_override: l.freightOverride,
+              line_total: l.lineTotal,
+              sort_order: idx,
+            }
+          })
         )
       }
 

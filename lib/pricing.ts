@@ -25,13 +25,15 @@ export function lookupBasePrice(
   rules: PricingRule[],
   productId: string,
   customerType: CustomerType,
-  tier: VolumeTier
+  tier: VolumeTier,
+  uom: UOM = 'm3'
 ): number | null {
   const rule = rules.find(
     (r) =>
       r.product_id === productId &&
       r.customer_type === customerType &&
-      r.volume_tier === tier
+      r.volume_tier === tier &&
+      (r.uom === uom || r.uom == null)
   )
   return rule?.price_per_unit ?? null
 }
@@ -40,11 +42,12 @@ export function lookupFreight(
   matrix: FreightMatrix[],
   regionId: string,
   category: string,
-  fulfilmentType: FulfilmentType
+  fulfilmentType: FulfilmentType,
+  uom: UOM = 'm3'
 ): number {
   if (fulfilmentType === 'pickup') return 0
   const row = matrix.find(
-    (f) => f.region_id === regionId && f.product_category === category
+    (f) => f.region_id === regionId && f.product_category === category && (f.uom === uom || f.uom == null)
   )
   return row?.price_per_unit ?? 0
 }

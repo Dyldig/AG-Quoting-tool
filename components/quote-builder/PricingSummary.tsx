@@ -65,10 +65,14 @@ export function PricingSummary({ products, pricingRules }: PricingSummaryProps) 
         ) : (
           linesList.map((line) => {
             const product = products.find((p) => p.id === line.productId)
+            const isBlendCompost = blendOpen && line.productCategory === 'compost'
+            const isPellet = line.productCategory === 'pellets'
+            const pricingUom = (isBlendCompost || isPellet) ? 't' : line.uom
+            const effectiveVolumeForRrp = isBlendCompost ? line.volumeT : line.volume
             const rrp = customerType === 'distributor'
-              ? lookupBasePrice(pricingRules, line.productId, 'customer', line.tier)
+              ? lookupBasePrice(pricingRules, line.productId, 'customer', line.tier, pricingUom)
               : null
-            const rrpLineTotal = rrp != null ? line.volume * (rrp + (blendOpen ? 0 : line.freight)) : null
+            const rrpLineTotal = rrp != null ? effectiveVolumeForRrp * (rrp + (blendOpen ? 0 : line.freight)) : null
 
             return (
               <div key={line.id} className="flex flex-col gap-1">
@@ -77,9 +81,13 @@ export function PricingSummary({ products, pricingRules }: PricingSummaryProps) 
                   <span className="font-medium">{formatCurrency(line.lineTotal)}</span>
                 </div>
                 <div className="text-xs text-brand-brown/50 flex gap-3">
-                  <span>{line.volume} {line.uom === 'm3' ? 'm³' : 't'}</span>
-                  <span>Base: {formatCurrency(line.basePrice)}</span>
-                  {line.productCategory === 'pellets' ? (
+                  {isBlendCompost && line.uom === 'm3' ? (
+                    <span>{line.volumeT.toFixed(3)} t (from {line.volume} m³)</span>
+                  ) : (
+                    <span>{line.volume} {line.uom === 'm3' ? 'm³' : 't'}</span>
+                  )}
+                  <span>Base: {formatCurrency(line.basePrice)}/{pricingUom === 'm3' ? 'm³' : 't'}</span>
+                  {isPellet ? (
                     <span>Freight: {line.freightOverride > 0 ? formatCurrency(line.freightOverride) : 'Ex gate'}</span>
                   ) : blendOpen ? (
                     <span className="text-brand-brown/30">Freight: blend</span>

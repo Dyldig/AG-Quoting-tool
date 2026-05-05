@@ -40,25 +40,33 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
       const product = products.find((p) => p.id === productId)
       if (!product) return
 
-      const uom: UOM = product.category === 'pellets' ? 't' : (u ?? line.uom)
-      const volT = calcVolumeTonnes(volume, uom, product)
+      // Display UOM: pellets always t; others follow selection
+      const displayUom: UOM = product.category === 'pellets' ? 't' : (u ?? line.uom)
+
+      // Pricing UOM: pellets → t, blend compost → t, others → displayUom
+      const isBlendCompost = blendOpen && product.category === 'compost'
+      const pricingUom: UOM = (product.category === 'pellets' || isBlendCompost) ? 't' : displayUom
+
+      // Volume in tonnes (always uses displayUom for the conversion)
+      const volT = calcVolumeTonnes(volume, displayUom, product)
       const tier = calcTier(volT)
-      const basePrice = lookupBasePrice(pricingRules, productId, customerType, tier) ?? 0
-      const freight = lookupFreight(freightMatrix, regionId, product.category, fulfilmentType)
+
+      const basePrice = lookupBasePrice(pricingRules, productId, customerType, tier, pricingUom) ?? 0
+      const freight = lookupFreight(freightMatrix, regionId, product.category, fulfilmentType, pricingUom)
       const freightOverride = freightOvr ?? freightOverrideValueRef.current
 
       let lineTotal: number
       if (product.category === 'pellets') {
         lineTotal = volume * (basePrice + freightOverride)
       } else if (blendOpen) {
-        // freight handled cumulatively in blend section
-        lineTotal = volume * basePrice
+        // blend compost: price per tonne × tonne volume; others: base price × display volume
+        lineTotal = isBlendCompost ? volT * basePrice : volume * basePrice
       } else {
         lineTotal = calcLineTotal(volume, basePrice, freight)
       }
 
       updateLine(lineId, {
-        volume, uom, productId,
+        volume, uom: displayUom, productId,
         productCategory: product.category,
         volumeT: volT, tier, basePrice, freight,
         freightOverride, lineTotal,
@@ -132,6 +140,9 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
 
   const currentProduct = products.find((p) => p.id === line.productId)
   const isPellet = currentProduct?.category === 'pellets'
+  const isBlendCompost = blendOpen && currentProduct?.category === 'compost'
+  // Effective pricing UOM for display purposes
+  const pricingUomDisplay: UOM = (isPellet || isBlendCompost) ? 't' : line.uom
 
   function handleProductChange(newProductId: string) {
     freightOverrideValueRef.current = 0
@@ -220,8 +231,14 @@ export function ProductLine({ lineId, products, pricingRules, freightMatrix }: P
             {line.tier === 'bulk' ? 'Bulk' : 'Standard'}
           </Badge>
         </MetaCell>
-        <MetaCell label="Tonnes">{line.volumeT.toFixed(3)}</MetaCell>
-        <MetaCell label="Base Price">{formatCurrency(line.basePrice)}/{line.uom === 'm3' ? 'm³' : 't'}</MetaCell>
+        <MetaCell label="Tonnes">
+          {isBlendCompost && line.uom === 'm3'
+            ? <span title={`Converted from ${line.volume} m³`}>{line.volumeT.toFixed(3)} t (from {line.volume} m³)</span>
+            : line.volumeT.toFixed(3)}
+        </MetaCell>
+        <MetaCell label="Base Price">
+          {formatCurrency(line.basePrice)}/{pricingUomDisplay === 'm3' ? 'm³' : 't'}
+        </MetaCell>
         <MetaCell label="Freight">
           {isPellet
             ? (line.freightOverride > 0 ? formatCurrency(line.freightOverride) : 'Ex gate')

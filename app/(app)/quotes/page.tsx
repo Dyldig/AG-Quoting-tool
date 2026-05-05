@@ -11,7 +11,7 @@ export default async function QuotesPage() {
 
   const query = supabase
     .from('quotes')
-    .select('*, region:regions(name), profile:profiles(full_name)')
+    .select('*, region:regions(name), profile:profiles!quotes_created_by_fkey(full_name)')
     .order('created_at', { ascending: false })
     .limit(200)
 

@@ -48,6 +48,7 @@ export interface PricingRule {
   volume_tier: VolumeTier
   bulk_threshold_t: number
   price_per_unit: number
+  uom?: string
   effective_date: string
   created_at: string
   product?: Product
@@ -58,6 +59,7 @@ export interface FreightMatrix {
   region_id: string
   product_category: ProductCategory
   price_per_unit: number
+  uom?: string
   effective_date: string
   created_at: string
   region?: Region
